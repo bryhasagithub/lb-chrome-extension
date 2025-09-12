@@ -27,6 +27,11 @@ document.addEventListener("DOMContentLoaded", function () {
   const transactionList = document.getElementById("transactionList")
   const closeModal = document.getElementById("closeModal")
 
+  // Search elements
+  const userSearchInput = document.getElementById("userSearch")
+  const clearSearchButton = document.getElementById("clearSearch")
+  const searchResultsInfo = document.getElementById("searchResultsInfo")
+
   // Stats elements
   const totalTipsEl = document.getElementById("totalTips")
   const waitingOnEl = document.getElementById("waitingOn")
@@ -35,6 +40,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   let isScraping = false
   let currentSort = { column: "delta", direction: "desc" } // Default sort by delta descending
+  let currentSearchTerm = "" // Track current search term
 
   // Helper function to get excluded users list
   function getExcludedUsers() {
@@ -47,12 +53,37 @@ document.addEventListener("DOMContentLoaded", function () {
       .filter((username) => username.length > 0)
   }
 
+  // Helper function to get current user(s) list
+  function getCurrentUsers() {
+    const currentUserText = currentUserInput.value.trim()
+    if (!currentUserText) return []
+
+    return currentUserText
+      .split(",")
+      .map((username) => username.trim())
+      .filter((username) => username.length > 0)
+  }
+
+  // Helper function to check if a username matches any of the current users
+  function isCurrentUser(username) {
+    const currentUsers = getCurrentUsers()
+    if (currentUsers.length === 0) return false
+
+    const normalizedUsername = username.toLowerCase().trim()
+    return currentUsers.some(
+      (currentUser) => currentUser.toLowerCase().trim() === normalizedUsername
+    )
+  }
+
   // Ensure modal starts hidden immediately
   transactionModal.classList.add("hidden")
   transactionModal.style.display = "none"
 
   // Load and display current data
   loadData()
+
+  // Initialize search UI
+  updateSearchUI()
 
   // Force hide modal after a short delay to ensure it's hidden
   setTimeout(() => {
@@ -61,10 +92,15 @@ document.addEventListener("DOMContentLoaded", function () {
     transactionModal.style.display = "none"
   }, 100)
 
-  // Load current user and exclude users from storage
+  // Load current user(s) and exclude users from storage
   chrome.storage.local.get(["currentUser", "excludeUsers"], (result) => {
     if (result.currentUser) {
-      currentUserInput.value = result.currentUser
+      // Handle both single username (legacy) and multiple usernames
+      if (Array.isArray(result.currentUser)) {
+        currentUserInput.value = result.currentUser.join(", ")
+      } else {
+        currentUserInput.value = result.currentUser
+      }
     }
     if (result.excludeUsers) {
       excludeUsersInput.value = result.excludeUsers
@@ -79,12 +115,21 @@ document.addEventListener("DOMContentLoaded", function () {
   exportJSONButton.addEventListener("click", () => exportData("json"))
   closeModal.addEventListener("click", closeTransactionModal)
 
+  // Search event listeners
+  userSearchInput.addEventListener("input", handleUserSearch)
+  clearSearchButton.addEventListener("click", clearUserSearch)
+
   // Close modal when clicking outside of it
   transactionModal.addEventListener("click", (e) => {
     console.log("Modal clicked, target:", e.target)
     if (e.target === transactionModal) {
       closeTransactionModal()
     }
+  })
+
+  // Prevent scroll propagation on modal content
+  transactionModal.addEventListener("wheel", (e) => {
+    e.stopPropagation()
   })
 
   // Add debugging to see if modal is being shown unexpectedly
@@ -104,12 +149,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
   observer.observe(transactionModal, { attributes: true })
 
-  // Save username when changed
+  // Save username(s) when changed
   currentUserInput.addEventListener("blur", () => {
-    const username = currentUserInput.value.trim()
-    if (username) {
-      chrome.storage.local.set({ currentUser: username })
-      console.log("Username saved:", username)
+    const usernames = getCurrentUsers()
+    if (usernames.length > 0) {
+      chrome.storage.local.set({ currentUser: usernames })
+      console.log("Username(s) saved:", usernames)
     }
   })
 
@@ -245,11 +290,19 @@ document.addEventListener("DOMContentLoaded", function () {
     let waitingOn = 0
     let tipsOwed = 0
 
-    // Get current user from storage
+    // Get current user(s) from storage
     chrome.storage.local.get(["currentUser"], (result) => {
-      const currentUser =
-        result.currentUser || currentUserInput.value.trim() || "unknown_user"
-      console.log("Current user for stats calculation:", currentUser)
+      let currentUsers = []
+      if (result.currentUser) {
+        if (Array.isArray(result.currentUser)) {
+          currentUsers = result.currentUser
+        } else {
+          currentUsers = [result.currentUser]
+        }
+      } else {
+        currentUsers = getCurrentUsers()
+      }
+      console.log("Current user(s) for stats calculation:", currentUsers)
 
       // Calculate detailed stats for each user (same logic as updateUserList)
       const userStats = {}
@@ -265,16 +318,12 @@ document.addEventListener("DOMContentLoaded", function () {
       const excludedUsers = getExcludedUsers()
       console.log("Excluded users:", excludedUsers)
 
-      // Initialize user stats for all users except current user and excluded users
+      // Initialize user stats for all users except current user(s) and excluded users
       allUsers.forEach((username) => {
-        const normalizedCurrentUser = currentUser.toLowerCase().trim()
         const normalizedUsername = username.toLowerCase().trim()
 
-        // Skip current user
-        if (
-          currentUser !== "unknown_user" &&
-          normalizedUsername === normalizedCurrentUser
-        ) {
+        // Skip current user(s)
+        if (currentUsers.length > 0 && isCurrentUser(username)) {
           console.log(`Skipping current user in stats: ${username}`)
           return
         }
@@ -298,27 +347,21 @@ document.addEventListener("DOMContentLoaded", function () {
         const amountNum = parseFloat(amount) || 0
         const transactionDate = new Date(timestamp)
 
-        // Normalize usernames for comparison
-        const normalizedCurrentUser = currentUser.toLowerCase().trim()
-        const normalizedFrom = from.toLowerCase().trim()
-        const normalizedTo = to.toLowerCase().trim()
-
-        // Skip if both users are the current user
+        // Skip if both users are current users
         if (
-          currentUser !== "unknown_user" &&
-          normalizedFrom === normalizedCurrentUser &&
-          normalizedTo === normalizedCurrentUser
+          currentUsers.length > 0 &&
+          isCurrentUser(from) &&
+          isCurrentUser(to)
         ) {
           return
         }
 
-        // Process transactions involving current user
+        // Process transactions involving current user(s)
         if (
-          currentUser !== "unknown_user" &&
-          (normalizedFrom === normalizedCurrentUser ||
-            normalizedTo === normalizedCurrentUser)
+          currentUsers.length > 0 &&
+          (isCurrentUser(from) || isCurrentUser(to))
         ) {
-          if (normalizedFrom === normalizedCurrentUser) {
+          if (isCurrentUser(from)) {
             // Current user sent to someone else - update the recipient's received amount
             if (userStats[to]) {
               userStats[to].received += amountNum
@@ -380,13 +423,21 @@ document.addEventListener("DOMContentLoaded", function () {
       userBalances: Object.keys(userBalances).length,
     })
 
-    // Get current user for calculations
+    // Get current user(s) for calculations
     chrome.storage.local.get(["currentUser"], (result) => {
-      const currentUser =
-        result.currentUser || currentUserInput.value.trim() || "unknown_user"
-      console.log("Current user for table:", currentUser)
+      let currentUsers = []
+      if (result.currentUser) {
+        if (Array.isArray(result.currentUser)) {
+          currentUsers = result.currentUser
+        } else {
+          currentUsers = [result.currentUser]
+        }
+      } else {
+        currentUsers = getCurrentUsers()
+      }
+      console.log("Current user(s) for table:", currentUsers)
       console.log("Current user input value:", currentUserInput.value)
-      console.log("Stored current user:", result.currentUser)
+      console.log("Stored current user(s):", result.currentUser)
 
       // If no transactions, show no data message
       if (transactions.length === 0) {
@@ -411,19 +462,13 @@ document.addEventListener("DOMContentLoaded", function () {
       const excludedUsers = getExcludedUsers()
       console.log("Excluded users for table:", excludedUsers)
 
-      // Initialize user stats for all users except current user and excluded users
+      // Initialize user stats for all users except current user(s) and excluded users
       allUsers.forEach((username) => {
-        // Skip current user if we know who it is (case-insensitive comparison)
-        const normalizedCurrentUser = currentUser.toLowerCase().trim()
         const normalizedUsername = username.toLowerCase().trim()
 
-        if (
-          currentUser !== "unknown_user" &&
-          normalizedUsername === normalizedCurrentUser
-        ) {
-          console.log(
-            `Skipping current user: ${username} (matches ${currentUser})`
-          )
+        // Skip current user(s) if we know who they are
+        if (currentUsers.length > 0 && isCurrentUser(username)) {
+          console.log(`Skipping current user: ${username}`)
           return
         }
 
@@ -452,32 +497,26 @@ document.addEventListener("DOMContentLoaded", function () {
           from,
           to,
           amount: amountNum,
-          currentUser,
+          currentUsers,
         })
 
-        // Normalize usernames for comparison
-        const normalizedCurrentUser = currentUser.toLowerCase().trim()
-        const normalizedFrom = from.toLowerCase().trim()
-        const normalizedTo = to.toLowerCase().trim()
-
-        // Skip if both users are the current user (shouldn't happen)
+        // Skip if both users are current users (shouldn't happen)
         if (
-          currentUser !== "unknown_user" &&
-          normalizedFrom === normalizedCurrentUser &&
-          normalizedTo === normalizedCurrentUser
+          currentUsers.length > 0 &&
+          isCurrentUser(from) &&
+          isCurrentUser(to)
         ) {
           console.log("Skipping self-to-self transaction")
           return
         }
 
-        // Process transactions involving current user differently
+        // Process transactions involving current user(s) differently
         if (
-          currentUser !== "unknown_user" &&
-          (normalizedFrom === normalizedCurrentUser ||
-            normalizedTo === normalizedCurrentUser)
+          currentUsers.length > 0 &&
+          (isCurrentUser(from) || isCurrentUser(to))
         ) {
-          // This is a transaction involving the current user
-          if (normalizedFrom === normalizedCurrentUser) {
+          // This is a transaction involving the current user(s)
+          if (isCurrentUser(from)) {
             // Current user sent to someone else - update the recipient's received amount
             if (userStats[to]) {
               userStats[to].received += amountNum
@@ -535,19 +574,36 @@ document.addEventListener("DOMContentLoaded", function () {
       console.log("Final user stats:", userStats)
 
       // Convert to array and add username for sorting
-      const usersArray = Object.entries(userStats).map(([username, stats]) => [
+      let usersArray = Object.entries(userStats).map(([username, stats]) => [
         username,
         { ...stats, username },
       ])
 
+      // Apply search filter if there's a search term
+      if (currentSearchTerm.trim()) {
+        const searchTerm = currentSearchTerm.toLowerCase().trim()
+        usersArray = usersArray.filter(([username, stats]) =>
+          username.toLowerCase().includes(searchTerm)
+        )
+      }
+
       // Sort users using the current sort settings
       const sortedUsers = sortUsers(usersArray)
+
+      // Update search results count
+      const totalUsers = Object.keys(userStats).length
+      updateSearchResultsCount(sortedUsers.length, totalUsers)
 
       console.log("Sorted users:", sortedUsers)
 
       if (sortedUsers.length === 0) {
-        userTableBody.innerHTML =
-          '<div class="no-data">No user data to display. Try entering your username above.</div>'
+        if (currentSearchTerm.trim()) {
+          userTableBody.innerHTML =
+            '<div class="no-data">No users found matching your search. Try a different search term.</div>'
+        } else {
+          userTableBody.innerHTML =
+            '<div class="no-data">No user data to display. Try entering your username above.</div>'
+        }
         return
       }
 
@@ -805,24 +861,29 @@ document.addEventListener("DOMContentLoaded", function () {
       return
     }
     console.log("Opening transaction modal for user:", username)
-    // Get current user and transactions
+    // Get current user(s) and transactions
     chrome.storage.local.get(["tipTransactions", "currentUser"], (result) => {
       const transactions = result.tipTransactions || []
-      const currentUser =
-        result.currentUser || currentUserInput.value.trim() || "unknown_user"
+      let currentUsers = []
+      if (result.currentUser) {
+        if (Array.isArray(result.currentUser)) {
+          currentUsers = result.currentUser
+        } else {
+          currentUsers = [result.currentUser]
+        }
+      } else {
+        currentUsers = getCurrentUsers()
+      }
 
-      // Filter transactions between current user and selected user
+      // Filter transactions between current user(s) and selected user
       const userTransactions = transactions.filter((tx) => {
-        const normalizedCurrentUser = currentUser.toLowerCase().trim()
         const normalizedUsername = username.toLowerCase().trim()
         const normalizedFrom = tx.from.toLowerCase().trim()
         const normalizedTo = tx.to.toLowerCase().trim()
 
         return (
-          (normalizedFrom === normalizedCurrentUser &&
-            normalizedTo === normalizedUsername) ||
-          (normalizedFrom === normalizedUsername &&
-            normalizedTo === normalizedCurrentUser)
+          (isCurrentUser(tx.from) && normalizedTo === normalizedUsername) ||
+          (isCurrentUser(tx.to) && normalizedFrom === normalizedUsername)
         )
       })
 
@@ -837,10 +898,7 @@ document.addEventListener("DOMContentLoaded", function () {
       let totalReceived = 0
 
       userTransactions.forEach((tx) => {
-        const normalizedCurrentUser = currentUser.toLowerCase().trim()
-        const normalizedFrom = tx.from.toLowerCase().trim()
-
-        if (normalizedFrom === normalizedCurrentUser) {
+        if (isCurrentUser(tx.from)) {
           totalSent += tx.amount
         } else {
           totalReceived += tx.amount
@@ -879,9 +937,7 @@ document.addEventListener("DOMContentLoaded", function () {
           </div>
           ${userTransactions
             .map((tx) => {
-              const normalizedCurrentUser = currentUser.toLowerCase().trim()
-              const normalizedFrom = tx.from.toLowerCase().trim()
-              const isSent = normalizedFrom === normalizedCurrentUser
+              const isSent = isCurrentUser(tx.from)
               const direction = isSent ? "sent" : "received"
               const otherUser = isSent ? tx.to : tx.from
               const date = new Date(tx.timestamp).toLocaleString()
@@ -909,6 +965,9 @@ document.addEventListener("DOMContentLoaded", function () {
       // Show modal
       transactionModal.classList.remove("hidden")
       transactionModal.style.display = "flex"
+
+      // Prevent background scrolling
+      document.body.style.overflow = "hidden"
     })
   }
 
@@ -916,5 +975,60 @@ document.addEventListener("DOMContentLoaded", function () {
     console.log("Closing transaction modal")
     transactionModal.classList.add("hidden")
     transactionModal.style.display = "none"
+
+    // Restore background scrolling
+    document.body.style.overflow = "auto"
+  }
+
+  // Search functions
+  function handleUserSearch(e) {
+    currentSearchTerm = e.target.value
+    updateSearchUI()
+
+    // Re-render the user list with the new search term
+    chrome.storage.local.get(["tipTransactions", "userBalances"], (result) => {
+      const transactions = result.tipTransactions || []
+      const userBalances = result.userBalances || {}
+      updateUserList(transactions, userBalances)
+    })
+  }
+
+  function clearUserSearch() {
+    userSearchInput.value = ""
+    currentSearchTerm = ""
+    updateSearchUI()
+
+    // Re-render the user list without search filter
+    chrome.storage.local.get(["tipTransactions", "userBalances"], (result) => {
+      const transactions = result.tipTransactions || []
+      const userBalances = result.userBalances || {}
+      updateUserList(transactions, userBalances)
+    })
+  }
+
+  function updateSearchUI() {
+    // Update clear button visibility
+    if (currentSearchTerm.trim()) {
+      clearSearchButton.classList.remove("hidden")
+    } else {
+      clearSearchButton.classList.add("hidden")
+    }
+
+    // Update search results info
+    if (currentSearchTerm.trim()) {
+      searchResultsInfo.classList.remove("hidden")
+      // We'll update the count in updateUserList
+    } else {
+      searchResultsInfo.classList.add("hidden")
+    }
+  }
+
+  function updateSearchResultsCount(filteredCount, totalCount) {
+    if (currentSearchTerm.trim()) {
+      searchResultsInfo.textContent = `Showing ${filteredCount} of ${totalCount} users`
+      searchResultsInfo.classList.remove("hidden")
+    } else {
+      searchResultsInfo.classList.add("hidden")
+    }
   }
 })

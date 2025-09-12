@@ -866,8 +866,14 @@
     } else if (request.type === "GET_TIPS") {
       sendResponse({ tipTransactions, currentUser })
     } else if (request.type === "SET_USER") {
-      currentUser = request.username
-      chrome.storage.local.set({ currentUser })
+      // Handle both single username and array of usernames
+      if (Array.isArray(request.username)) {
+        currentUser = request.username[0] // Use first username for detection purposes
+        chrome.storage.local.set({ currentUser: request.username })
+      } else {
+        currentUser = request.username
+        chrome.storage.local.set({ currentUser: request.username })
+      }
     } else if (request.type === "CLEAR_TIPS") {
       tipTransactions = []
       chrome.storage.local.set({ tipTransactions: [] })
@@ -878,7 +884,12 @@
   // Load existing data on startup
   chrome.storage.local.get(["tipTransactions", "currentUser"], (result) => {
     tipTransactions = result.tipTransactions || []
-    currentUser = result.currentUser
+    // Handle both single username (legacy) and multiple usernames
+    if (Array.isArray(result.currentUser)) {
+      currentUser = result.currentUser[0] // Use first username for detection purposes
+    } else {
+      currentUser = result.currentUser
+    }
   })
 
   console.log("Tip Tracker content script loaded for LuckyBird.io")
