@@ -1,8 +1,7 @@
-# LuckyBird.io Tip Tracker Extension
+# LB Tip Tracker Extension
 
-A Chrome extension to track and analyze tip transactions on LuckyBird.io gaming platform.
-
-## Features
+### WORK IN PROGRESS 
+A Chrome extension to track and analyze tip transactions  Features
 
 - **Automatic Data Collection**: Scrapes tip transaction data from the LuckyBird.io website
 - **User Balance Tracking**: Calculates net balances between you and other users
