@@ -7,7 +7,7 @@
   let isScraping = false
   let currentPage = 1
 
-  let maxPages = 20 // Default page limit
+  let maxPages = 20 // Default page limit (max: 500)
 
   // Function to find element by text content
   function findElementByText(selector, text) {
@@ -672,13 +672,27 @@
   }
 
   // Main scraping function
-  async function startScraping(pageLimit = 20) {
+  async function startScraping(pageLimit = 20, incremental = false) {
     if (isScraping) return
 
     isScraping = true
     currentPage = 1
     maxPages = pageLimit
-    tipTransactions = []
+
+    // Load existing data if doing incremental update
+    if (incremental) {
+      const result = await chrome.storage.local.get([
+        "tipTransactions",
+        "lastUpdated",
+      ])
+      tipTransactions = result.tipTransactions || []
+      console.log(
+        `🔄 Incremental update: Starting with ${tipTransactions.length} existing transactions`
+      )
+    } else {
+      tipTransactions = []
+      console.log("🆕 Full scrape: Starting fresh")
+    }
 
     // Try to detect current user if not already set
     if (!currentUser) {
@@ -730,13 +744,56 @@
       }
 
       // Scrape all pages
+      let newTransactionsCount = 0
+      let foundExistingTransaction = false
+
       while (true) {
         const pageTransactions = scrapeTransactionPage()
-        tipTransactions.push(...pageTransactions)
 
-        console.log(
-          `Page ${currentPage}: Found ${pageTransactions.length} transactions`
-        )
+        // For incremental updates, check if we've seen these transactions before
+        if (incremental && pageTransactions.length > 0) {
+          const existingTransactionIds = new Set(
+            tipTransactions.map(
+              (tx) => `${tx.from}-${tx.to}-${tx.amount}-${tx.timestamp}`
+            )
+          )
+
+          const newTransactions = []
+          for (const transaction of pageTransactions) {
+            const transactionId = `${transaction.from}-${transaction.to}-${transaction.amount}-${transaction.timestamp}`
+            if (!existingTransactionIds.has(transactionId)) {
+              newTransactions.push(transaction)
+            } else {
+              foundExistingTransaction = true
+              console.log(
+                `🔄 Found existing transaction, stopping incremental update`
+              )
+              break
+            }
+          }
+
+          tipTransactions.push(...newTransactions)
+          newTransactionsCount += newTransactions.length
+
+          console.log(
+            `Page ${currentPage}: Found ${pageTransactions.length} transactions, ${newTransactions.length} new`
+          )
+
+          // If we found existing transactions, we can stop here for incremental updates
+          if (foundExistingTransaction) {
+            console.log(
+              `✅ Incremental update complete: Found ${newTransactionsCount} new transactions`
+            )
+            break
+          }
+        } else {
+          tipTransactions.push(...pageTransactions)
+          newTransactionsCount += pageTransactions.length
+
+          console.log(
+            `Page ${currentPage}: Found ${pageTransactions.length} transactions`
+          )
+        }
 
         chrome.runtime.sendMessage({
           type: "SCRAPING_PROGRESS",
@@ -779,6 +836,8 @@
         data: {
           transactions: tipTransactions,
           userBalances: userBalances,
+          newTransactionsCount: newTransactionsCount,
+          incremental: incremental,
         },
       })
     } catch (error) {
@@ -801,7 +860,8 @@
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === "START_SCRAPING") {
       const pageLimit = request.pageLimit || 20
-      startScraping(pageLimit)
+      const incremental = request.incremental || false
+      startScraping(pageLimit, incremental)
       sendResponse({ success: true })
     } else if (request.type === "GET_TIPS") {
       sendResponse({ tipTransactions, currentUser })

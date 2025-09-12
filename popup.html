@@ -97,6 +97,11 @@
         opacity: 0.6;
       }
 
+      .refresh-disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
       .secondary-button {
         background: var(--lb-blue-260);
         color: var(--lb-white);
@@ -468,13 +473,18 @@
           class="input-field"
           value="20"
           min="1"
-          max="100"
+          max="500"
           placeholder="20 (default)"
         />
-        <small class="input-help">Maximum pages to scrape (default: 20)</small>
+        <small class="input-help"
+          >Maximum pages to scrape (default: 20, max: 500)</small
+        >
       </div>
 
       <button id="scrapeButton" class="button">Start Scraping Tips</button>
+      <button id="refreshButton" class="button secondary-button">
+        🔄 Refresh Data
+      </button>
       <button id="clearButton" class="button secondary-button">
         Clear Data
       </button>

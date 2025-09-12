@@ -1,6 +1,7 @@
 // Popup script for Tip Tracker extension
 document.addEventListener("DOMContentLoaded", function () {
   const scrapeButton = document.getElementById("scrapeButton")
+  const refreshButton = document.getElementById("refreshButton")
   const clearButton = document.getElementById("clearButton")
   const exportCSVButton = document.getElementById("exportCSV")
   const exportJSONButton = document.getElementById("exportJSON")
@@ -48,6 +49,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Event listeners
   scrapeButton.addEventListener("click", startScraping)
+  refreshButton.addEventListener("click", refreshData)
   clearButton.addEventListener("click", clearData)
   exportCSVButton.addEventListener("click", () => exportData("csv"))
   exportJSONButton.addEventListener("click", () => exportData("json"))
@@ -174,6 +176,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
         updateStats(transactions, userBalances, lastUpdated)
         updateUserList(transactions, userBalances)
+
+        // Enable/disable refresh button based on whether we have data
+        refreshButton.disabled = transactions.length === 0
+        if (transactions.length === 0) {
+          refreshButton.classList.add("refresh-disabled")
+        } else {
+          refreshButton.classList.remove("refresh-disabled")
+        }
       }
     )
   }
@@ -533,13 +543,14 @@ document.addEventListener("DOMContentLoaded", function () {
     const pageLimit = parseInt(pageLimitInput.value) || 20
 
     // Validate page limit
-    if (pageLimit < 1 || pageLimit > 100) {
-      showError("Page limit must be between 1 and 100")
+    if (pageLimit < 1 || pageLimit > 500) {
+      showError("Page limit must be between 1 and 500")
       return
     }
 
     isScraping = true
     scrapeButton.disabled = true
+    refreshButton.disabled = true
     scrapeButton.textContent = "Scraping..."
     progressContainer.classList.remove("hidden")
     statusDiv.classList.add("hidden")
@@ -551,6 +562,45 @@ document.addEventListener("DOMContentLoaded", function () {
         {
           type: "START_SCRAPING",
           pageLimit: pageLimit,
+          incremental: false,
+        },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            showError("Please navigate to luckybird.io first")
+            resetScraping()
+          }
+        }
+      )
+    })
+  }
+
+  function refreshData() {
+    if (isScraping) return
+
+    // Get page limit from input
+    const pageLimit = parseInt(pageLimitInput.value) || 20
+
+    // Validate page limit
+    if (pageLimit < 1 || pageLimit > 500) {
+      showError("Page limit must be between 1 and 500")
+      return
+    }
+
+    isScraping = true
+    scrapeButton.disabled = true
+    refreshButton.disabled = true
+    refreshButton.textContent = "Refreshing..."
+    progressContainer.classList.remove("hidden")
+    statusDiv.classList.add("hidden")
+
+    // Send message to content script to start incremental scraping
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      chrome.tabs.sendMessage(
+        tabs[0].id,
+        {
+          type: "START_SCRAPING",
+          pageLimit: pageLimit,
+          incremental: true,
         },
         (response) => {
           if (chrome.runtime.lastError) {
@@ -569,9 +619,19 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function scrapingComplete(data) {
     resetScraping()
-    showSuccess(
-      `Scraping complete! Found ${data.transactions.length} transactions.`
-    )
+
+    if (data.incremental) {
+      const message =
+        data.newTransactionsCount > 0
+          ? `Refresh complete! Found ${data.newTransactionsCount} new transactions.`
+          : "Refresh complete! No new transactions found."
+      showSuccess(message)
+    } else {
+      showSuccess(
+        `Scraping complete! Found ${data.transactions.length} transactions.`
+      )
+    }
+
     loadData()
   }
 
@@ -579,7 +639,11 @@ document.addEventListener("DOMContentLoaded", function () {
     isScraping = false
     scrapeButton.disabled = false
     scrapeButton.textContent = "Start Scraping Tips"
+    refreshButton.textContent = "🔄 Refresh Data"
     progressContainer.classList.add("hidden")
+
+    // Refresh button state will be updated by loadData()
+    loadData()
   }
 
   function showSuccess(message) {
