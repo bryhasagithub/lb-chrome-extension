@@ -325,7 +325,13 @@
       }
 
       .hidden {
-        display: none;
+        display: none !important;
+      }
+
+      #transactionModal.hidden {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
       }
 
       .export-buttons {
@@ -404,6 +410,185 @@
       .user-table-container::-webkit-scrollbar-thumb:hover,
       .table-body::-webkit-scrollbar-thumb:hover {
         background: var(--lb-green);
+      }
+
+      /* Modal Styles */
+      .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal-content {
+        background: var(--lb-blue-700);
+        border: 1px solid var(--lb-blue-300);
+        border-radius: 8px;
+        width: 90%;
+        max-width: 600px;
+        max-height: 80vh;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      }
+
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px;
+        background: var(--lb-blue-900);
+        border-bottom: 1px solid var(--lb-blue-300);
+      }
+
+      .modal-header h3 {
+        margin: 0;
+        color: var(--lb-green);
+        font-size: 18px;
+      }
+
+      .close-button {
+        background: none;
+        border: none;
+        color: var(--lb-white);
+        font-size: 24px;
+        cursor: pointer;
+        padding: 0;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        transition: background-color 0.2s ease;
+      }
+
+      .close-button:hover {
+        background: var(--lb-blue-300);
+      }
+
+      .modal-body {
+        padding: 20px;
+        max-height: 60vh;
+        overflow-y: auto;
+      }
+
+      .transaction-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .transaction-item {
+        background: var(--lb-blue-300);
+        border: 1px solid var(--lb-blue-260);
+        border-radius: 6px;
+        padding: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: background-color 0.2s ease;
+      }
+
+      .transaction-item:hover {
+        background: var(--lb-blue-260);
+      }
+
+      .transaction-info {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .transaction-direction {
+        font-size: 14px;
+        font-weight: bold;
+        color: var(--lb-white);
+      }
+
+      .transaction-direction.sent {
+        color: var(--lb-red);
+      }
+
+      .transaction-direction.received {
+        color: var(--lb-green);
+      }
+
+      .transaction-amount {
+        font-size: 16px;
+        font-weight: bold;
+        color: var(--lb-green);
+      }
+
+      .transaction-date {
+        font-size: 12px;
+        color: var(--lb-white);
+        opacity: 0.7;
+      }
+
+      .transaction-summary {
+        background: var(--lb-blue-900);
+        border: 1px solid var(--lb-blue-300);
+        border-radius: 6px;
+        padding: 15px;
+        margin-bottom: 15px;
+        text-align: center;
+      }
+
+      .transaction-summary h4 {
+        margin: 0 0 10px 0;
+        color: var(--lb-green);
+        font-size: 16px;
+      }
+
+      .summary-stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .summary-stat {
+        text-align: center;
+      }
+
+      .summary-stat-value {
+        font-size: 18px;
+        font-weight: bold;
+        color: var(--lb-green);
+      }
+
+      .summary-stat-label {
+        font-size: 12px;
+        color: var(--lb-white);
+        opacity: 0.8;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .no-transactions {
+        text-align: center;
+        color: var(--lb-white);
+        opacity: 0.6;
+        padding: 40px 20px;
+        font-style: italic;
+      }
+
+      /* Clickable user names */
+      .user-name {
+        cursor: pointer;
+        transition: color 0.2s ease;
+        text-decoration: underline;
+        text-decoration-color: transparent;
+      }
+
+      .user-name:hover {
+        color: var(--lb-green);
+        text-decoration-color: var(--lb-green);
       }
     </style>
   </head>
@@ -535,6 +720,21 @@
         <button id="exportJSON" class="button secondary-button">
           Export JSON
         </button>
+      </div>
+    </div>
+
+    <!-- Transaction Details Modal -->
+    <div id="transactionModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="modalTitle">Transaction Details</h3>
+          <button id="closeModal" class="close-button">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="transactionList" class="transaction-list">
+            <!-- Transaction items will be populated here -->
+          </div>
+        </div>
       </div>
     </div>
 

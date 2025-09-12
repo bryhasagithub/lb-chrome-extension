@@ -1,5 +1,12 @@
 // Popup script for Tip Tracker extension
 document.addEventListener("DOMContentLoaded", function () {
+  // Force close any open modals immediately
+  const modal = document.getElementById("transactionModal")
+  if (modal) {
+    console.log("Force hiding modal on page load")
+    modal.classList.add("hidden")
+    modal.style.display = "none"
+  }
   const scrapeButton = document.getElementById("scrapeButton")
   const refreshButton = document.getElementById("refreshButton")
   const clearButton = document.getElementById("clearButton")
@@ -13,6 +20,12 @@ document.addEventListener("DOMContentLoaded", function () {
   const progressBar = document.getElementById("progressBar")
   const progressText = document.getElementById("progressText")
   const userTableBody = document.getElementById("userTableBody")
+
+  // Modal elements
+  const transactionModal = document.getElementById("transactionModal")
+  const modalTitle = document.getElementById("modalTitle")
+  const transactionList = document.getElementById("transactionList")
+  const closeModal = document.getElementById("closeModal")
 
   // Stats elements
   const totalTipsEl = document.getElementById("totalTips")
@@ -34,8 +47,19 @@ document.addEventListener("DOMContentLoaded", function () {
       .filter((username) => username.length > 0)
   }
 
+  // Ensure modal starts hidden immediately
+  transactionModal.classList.add("hidden")
+  transactionModal.style.display = "none"
+
   // Load and display current data
   loadData()
+
+  // Force hide modal after a short delay to ensure it's hidden
+  setTimeout(() => {
+    console.log("Final check - ensuring modal is hidden")
+    transactionModal.classList.add("hidden")
+    transactionModal.style.display = "none"
+  }, 100)
 
   // Load current user and exclude users from storage
   chrome.storage.local.get(["currentUser", "excludeUsers"], (result) => {
@@ -53,6 +77,32 @@ document.addEventListener("DOMContentLoaded", function () {
   clearButton.addEventListener("click", clearData)
   exportCSVButton.addEventListener("click", () => exportData("csv"))
   exportJSONButton.addEventListener("click", () => exportData("json"))
+  closeModal.addEventListener("click", closeTransactionModal)
+
+  // Close modal when clicking outside of it
+  transactionModal.addEventListener("click", (e) => {
+    console.log("Modal clicked, target:", e.target)
+    if (e.target === transactionModal) {
+      closeTransactionModal()
+    }
+  })
+
+  // Add debugging to see if modal is being shown unexpectedly
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (
+        mutation.type === "attributes" &&
+        mutation.attributeName === "class"
+      ) {
+        console.log("Modal class changed:", transactionModal.className)
+        if (!transactionModal.classList.contains("hidden")) {
+          console.log("Modal is visible - this might be unexpected!")
+        }
+      }
+    })
+  })
+
+  observer.observe(transactionModal, { attributes: true })
 
   // Save username when changed
   currentUserInput.addEventListener("blur", () => {
@@ -508,7 +558,7 @@ document.addEventListener("DOMContentLoaded", function () {
           return `
             <div class="table-row">
               <div class="table-cell">
-                <span class="user-name">${username}</span>
+                <span class="user-name" data-username="${username}">${username}</span>
               </div>
               <div class="table-cell">
                 <span class="amount-received">$${stats.sent.toFixed(2)}</span>
@@ -532,6 +582,7 @@ document.addEventListener("DOMContentLoaded", function () {
       setTimeout(() => {
         addSortingListeners()
         updateSortArrows()
+        addUserClickListeners()
       }, 100)
     })
   }
@@ -730,5 +781,140 @@ document.addEventListener("DOMContentLoaded", function () {
     })
 
     return csv
+  }
+
+  // Modal functions
+  function addUserClickListeners() {
+    console.log("Adding click listeners to user names")
+    const userNames = document.querySelectorAll(".user-name[data-username]")
+    console.log("Found user names:", userNames.length)
+    userNames.forEach((userName) => {
+      userName.addEventListener("click", (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const username = e.target.getAttribute("data-username")
+        console.log("User name clicked:", username)
+        showTransactionModal(username)
+      })
+    })
+  }
+
+  function showTransactionModal(username) {
+    if (!username) {
+      console.log("No username provided, not opening modal")
+      return
+    }
+    console.log("Opening transaction modal for user:", username)
+    // Get current user and transactions
+    chrome.storage.local.get(["tipTransactions", "currentUser"], (result) => {
+      const transactions = result.tipTransactions || []
+      const currentUser =
+        result.currentUser || currentUserInput.value.trim() || "unknown_user"
+
+      // Filter transactions between current user and selected user
+      const userTransactions = transactions.filter((tx) => {
+        const normalizedCurrentUser = currentUser.toLowerCase().trim()
+        const normalizedUsername = username.toLowerCase().trim()
+        const normalizedFrom = tx.from.toLowerCase().trim()
+        const normalizedTo = tx.to.toLowerCase().trim()
+
+        return (
+          (normalizedFrom === normalizedCurrentUser &&
+            normalizedTo === normalizedUsername) ||
+          (normalizedFrom === normalizedUsername &&
+            normalizedTo === normalizedCurrentUser)
+        )
+      })
+
+      // Sort by timestamp (newest first)
+      userTransactions.sort((a, b) => b.timestamp - a.timestamp)
+
+      // Update modal title
+      modalTitle.textContent = `Transactions with ${username}`
+
+      // Calculate summary stats
+      let totalSent = 0
+      let totalReceived = 0
+
+      userTransactions.forEach((tx) => {
+        const normalizedCurrentUser = currentUser.toLowerCase().trim()
+        const normalizedFrom = tx.from.toLowerCase().trim()
+
+        if (normalizedFrom === normalizedCurrentUser) {
+          totalSent += tx.amount
+        } else {
+          totalReceived += tx.amount
+        }
+      })
+
+      const netAmount = totalReceived - totalSent
+
+      // Render modal content
+      if (userTransactions.length === 0) {
+        transactionList.innerHTML =
+          '<div class="no-transactions">No transactions found with this user.</div>'
+      } else {
+        transactionList.innerHTML = `
+          <div class="transaction-summary">
+            <h4>Summary</h4>
+            <div class="summary-stats">
+              <div class="summary-stat">
+                <div class="summary-stat-value">$${totalSent.toFixed(2)}</div>
+                <div class="summary-stat-label">You Sent</div>
+              </div>
+              <div class="summary-stat">
+                <div class="summary-stat-value">$${totalReceived.toFixed(
+                  2
+                )}</div>
+                <div class="summary-stat-label">You Received</div>
+              </div>
+            </div>
+            <div style="margin-top: 10px; font-size: 14px; color: var(--lb-white);">
+              Net: <span style="color: ${
+                netAmount >= 0 ? "var(--lb-green)" : "var(--lb-red)"
+              }">
+                ${netAmount >= 0 ? "+" : ""}$${netAmount.toFixed(2)}
+              </span>
+            </div>
+          </div>
+          ${userTransactions
+            .map((tx) => {
+              const normalizedCurrentUser = currentUser.toLowerCase().trim()
+              const normalizedFrom = tx.from.toLowerCase().trim()
+              const isSent = normalizedFrom === normalizedCurrentUser
+              const direction = isSent ? "sent" : "received"
+              const otherUser = isSent ? tx.to : tx.from
+              const date = new Date(tx.timestamp).toLocaleString()
+
+              return `
+              <div class="transaction-item">
+                <div class="transaction-info">
+                  <div class="transaction-direction ${direction}">
+                    ${
+                      isSent
+                        ? `Sent to ${otherUser}`
+                        : `Received from ${otherUser}`
+                    }
+                  </div>
+                  <div class="transaction-date">${date}</div>
+                </div>
+                <div class="transaction-amount">$${tx.amount.toFixed(2)}</div>
+              </div>
+            `
+            })
+            .join("")}
+        `
+      }
+
+      // Show modal
+      transactionModal.classList.remove("hidden")
+      transactionModal.style.display = "flex"
+    })
+  }
+
+  function closeTransactionModal() {
+    console.log("Closing transaction modal")
+    transactionModal.classList.add("hidden")
+    transactionModal.style.display = "none"
   }
 })
