@@ -941,20 +941,38 @@ document.addEventListener("DOMContentLoaded", function () {
               const direction = isSent ? "sent" : "received"
               const otherUser = isSent ? tx.to : tx.from
               const date = new Date(tx.timestamp).toLocaleString()
+              const formattedDate = new Date(tx.timestamp)
+                .toLocaleString("en-US", {
+                  year: "numeric",
+                  month: "2-digit",
+                  day: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: true,
+                })
+                .replace(",", "")
 
               return `
-              <div class="transaction-item">
+              <div class="transaction-item" data-transaction='${JSON.stringify(
+                tx
+              )}'>
                 <div class="transaction-info">
-                  <div class="transaction-direction ${direction}">
+                  <div class="transaction-direction ${direction}" data-copy="${
+                tx.from
+              } -> ${tx.to} ${tx.amount} ${formattedDate}">
                     ${
                       isSent
                         ? `Sent to ${otherUser}`
                         : `Received from ${otherUser}`
                     }
                   </div>
-                  <div class="transaction-date">${date}</div>
+                  <div class="transaction-date" data-copy="${tx.from} -> ${
+                tx.to
+              } ${tx.amount} ${formattedDate}">${date}</div>
                 </div>
-                <div class="transaction-amount">$${tx.amount.toFixed(2)}</div>
+                <div class="transaction-amount" data-copy="${tx.from} -> ${
+                tx.to
+              } ${tx.amount} ${formattedDate}">$${tx.amount.toFixed(2)}</div>
               </div>
             `
             })
@@ -966,8 +984,59 @@ document.addEventListener("DOMContentLoaded", function () {
       transactionModal.classList.remove("hidden")
       transactionModal.style.display = "flex"
 
+      // Add click listeners to transaction cells for clipboard copying
+      addTransactionCellClickListeners()
+
       // Prevent background scrolling
       document.body.style.overflow = "hidden"
+    })
+  }
+
+  function addTransactionCellClickListeners() {
+    // Add click listeners to all elements with data-copy attribute
+    const copyableElements = document.querySelectorAll("[data-copy]")
+    copyableElements.forEach((element) => {
+      element.style.cursor = "pointer"
+      element.addEventListener("click", async (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+
+        const copyText = element.getAttribute("data-copy")
+        try {
+          await navigator.clipboard.writeText(copyText)
+
+          // Show visual feedback
+          const originalText = element.textContent
+          element.textContent = "Copied!"
+          element.style.color = "var(--lb-green)"
+
+          setTimeout(() => {
+            element.textContent = originalText
+            element.style.color = ""
+          }, 1000)
+
+          console.log("Copied to clipboard:", copyText)
+        } catch (err) {
+          console.error("Failed to copy to clipboard:", err)
+          // Fallback for older browsers
+          const textArea = document.createElement("textarea")
+          textArea.value = copyText
+          document.body.appendChild(textArea)
+          textArea.select()
+          document.execCommand("copy")
+          document.body.removeChild(textArea)
+
+          // Show visual feedback
+          const originalText = element.textContent
+          element.textContent = "Copied!"
+          element.style.color = "var(--lb-green)"
+
+          setTimeout(() => {
+            element.textContent = originalText
+            element.style.color = ""
+          }, 1000)
+        }
+      })
     })
   }
 
