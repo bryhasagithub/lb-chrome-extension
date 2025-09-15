@@ -7,7 +7,7 @@
   let isScraping = false
   let currentPage = 1
 
-  let maxPages = 20 // Default page limit (max: 500)
+  let maxPages = 1000 // Default page limit (max: 1000)
 
   // Function to find element by text content
   function findElementByText(selector, text) {
@@ -746,6 +746,7 @@
       // Scrape all pages
       let newTransactionsCount = 0
       let foundExistingTransaction = false
+      let lastNewTransactionDate = null
 
       while (true) {
         const pageTransactions = scrapeTransactionPage()
@@ -763,6 +764,13 @@
             const transactionId = `${transaction.from}-${transaction.to}-${transaction.amount}-${transaction.timestamp}`
             if (!existingTransactionIds.has(transactionId)) {
               newTransactions.push(transaction)
+              // Track the date of the most recent new transaction
+              if (
+                !lastNewTransactionDate ||
+                transaction.timestamp > lastNewTransactionDate
+              ) {
+                lastNewTransactionDate = transaction.timestamp
+              }
             } else {
               foundExistingTransaction = true
               console.log(
@@ -838,6 +846,7 @@
           userBalances: userBalances,
           newTransactionsCount: newTransactionsCount,
           incremental: incremental,
+          lastNewTransactionDate: lastNewTransactionDate,
         },
       })
     } catch (error) {

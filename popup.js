@@ -650,8 +650,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const pageLimit = parseInt(pageLimitInput.value) || 20
 
     // Validate page limit
-    if (pageLimit < 1 || pageLimit > 500) {
-      showError("Page limit must be between 1 and 500")
+    if (pageLimit < 1 || pageLimit > 1000) {
+      showError("Page limit must be between 1 and 1000")
       return
     }
 
@@ -688,8 +688,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const pageLimit = parseInt(pageLimitInput.value) || 20
 
     // Validate page limit
-    if (pageLimit < 1 || pageLimit > 500) {
-      showError("Page limit must be between 1 and 500")
+    if (pageLimit < 1 || pageLimit > 1000) {
+      showError("Page limit must be between 1 and 1000")
       return
     }
 
@@ -728,10 +728,25 @@ document.addEventListener("DOMContentLoaded", function () {
     resetScraping()
 
     if (data.incremental) {
-      const message =
-        data.newTransactionsCount > 0
-          ? `Refresh complete! Found ${data.newTransactionsCount} new transactions.`
-          : "Refresh complete! No new transactions found."
+      let message
+      if (data.newTransactionsCount > 0) {
+        if (data.lastNewTransactionDate) {
+          const lastDate = new Date(
+            data.lastNewTransactionDate
+          ).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+          message = `Refresh complete! Found ${data.newTransactionsCount} new transactions up until ${lastDate}.`
+        } else {
+          message = `Refresh complete! Found ${data.newTransactionsCount} new transactions.`
+        }
+      } else {
+        message = "Refresh complete! No new transactions found."
+      }
       showSuccess(message)
     } else {
       showSuccess(
