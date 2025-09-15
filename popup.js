@@ -276,8 +276,14 @@ document.addEventListener("DOMContentLoaded", function () {
         refreshButton.disabled = transactions.length === 0
         if (transactions.length === 0) {
           refreshButton.classList.add("refresh-disabled")
+          // When no data, make "Start Scraping Tips" primary
+          scrapeButton.className = "button"
+          refreshButton.className = "button secondary-button"
         } else {
           refreshButton.classList.remove("refresh-disabled")
+          // When data exists, make "Refresh Data" primary
+          refreshButton.className = "button"
+          scrapeButton.className = "button secondary-button"
         }
       }
     )
@@ -761,7 +767,7 @@ document.addEventListener("DOMContentLoaded", function () {
     isScraping = false
     scrapeButton.disabled = false
     scrapeButton.textContent = "Start Scraping Tips"
-    refreshButton.textContent = "🔄 Refresh Data"
+    refreshButton.textContent = "Refresh Data"
     progressContainer.classList.add("hidden")
 
     // Refresh button state will be updated by loadData()
