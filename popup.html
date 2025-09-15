@@ -729,6 +729,72 @@
         color: var(--gh-text-secondary);
         font-style: italic;
       }
+
+      /* Loading Overlay */
+      .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(13, 17, 23, 0.8);
+        backdrop-filter: blur(2px);
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+      }
+
+      .loading-spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid var(--gh-border-primary);
+        border-top: 3px solid var(--gh-accent-fg);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      .loading-text {
+        color: var(--gh-text-primary);
+        font-size: 14px;
+        font-weight: 500;
+        text-align: center;
+      }
+
+      .loading-progress {
+        color: var(--gh-text-secondary);
+        font-size: 12px;
+        text-align: center;
+        margin-top: 8px;
+      }
+
+      .loading-warning {
+        color: var(--gh-attention-fg);
+        font-size: 12px;
+        text-align: center;
+        margin-top: 12px;
+        padding: 8px 12px;
+        background: rgba(210, 153, 34, 0.1);
+        border: 1px solid var(--gh-attention-fg);
+        border-radius: 4px;
+        max-width: 300px;
+        line-height: 1.4;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .loading-overlay.hidden {
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -895,6 +961,17 @@
             <!-- Transaction items will be populated here -->
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Scraping Tips...</div>
+      <div id="loadingProgress" class="loading-progress">Preparing...</div>
+      <div class="loading-warning">
+        ⚠️ Please do not leave this page or close the tips window while scraping
+        is in progress
       </div>
     </div>
 

@@ -38,9 +38,34 @@ document.addEventListener("DOMContentLoaded", function () {
   const usersCountEl = document.getElementById("usersCount")
   const tipsOwedEl = document.getElementById("tipsOwed")
 
+  // Loading overlay elements
+  const loadingOverlay = document.getElementById("loadingOverlay")
+  const loadingProgress = document.getElementById("loadingProgress")
+
   let isScraping = false
   let currentSort = { column: "delta", direction: "desc" } // Default sort by delta descending
   let currentSearchTerm = "" // Track current search term
+
+  // Loading overlay functions
+  function showLoadingOverlay() {
+    loadingOverlay.classList.remove("hidden")
+    // Disable all interactive elements
+    document
+      .querySelectorAll("button, input, select, textarea")
+      .forEach((el) => {
+        el.disabled = true
+      })
+  }
+
+  function hideLoadingOverlay() {
+    loadingOverlay.classList.add("hidden")
+    // Re-enable all interactive elements
+    document
+      .querySelectorAll("button, input, select, textarea")
+      .forEach((el) => {
+        el.disabled = false
+      })
+  }
 
   // Helper function to get excluded users list
   function getExcludedUsers() {
@@ -653,7 +678,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (isScraping) return
 
     // Get page limit from input
-    const pageLimit = parseInt(pageLimitInput.value) || 20
+    const pageLimit = parseInt(pageLimitInput.value) || 1000
 
     // Validate page limit
     if (pageLimit < 1 || pageLimit > 1000) {
@@ -661,29 +686,35 @@ document.addEventListener("DOMContentLoaded", function () {
       return
     }
 
-    isScraping = true
-    scrapeButton.disabled = true
-    refreshButton.disabled = true
-    scrapeButton.textContent = "Scraping..."
-    progressContainer.classList.remove("hidden")
-    statusDiv.classList.add("hidden")
+    // Check if there's existing data to determine if we should do incremental scraping
+    chrome.storage.local.get(["tipTransactions"], (result) => {
+      const hasExistingData =
+        result.tipTransactions && result.tipTransactions.length > 0
+      const incremental = hasExistingData
 
-    // Send message to content script to start scraping with page limit
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      chrome.tabs.sendMessage(
-        tabs[0].id,
-        {
-          type: "START_SCRAPING",
-          pageLimit: pageLimit,
-          incremental: false,
-        },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            showError("Please navigate to luckybird.io first")
-            resetScraping()
+      isScraping = true
+      showLoadingOverlay()
+      scrapeButton.textContent = incremental ? "Refreshing..." : "Scraping..."
+      progressContainer.classList.remove("hidden")
+      statusDiv.classList.add("hidden")
+
+      // Send message to content script to start scraping with page limit
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        chrome.tabs.sendMessage(
+          tabs[0].id,
+          {
+            type: "START_SCRAPING",
+            pageLimit: pageLimit,
+            incremental: incremental,
+          },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              showError("Please navigate to luckybird.io first")
+              resetScraping()
+            }
           }
-        }
-      )
+        )
+      })
     })
   }
 
@@ -691,7 +722,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (isScraping) return
 
     // Get page limit from input
-    const pageLimit = parseInt(pageLimitInput.value) || 20
+    const pageLimit = parseInt(pageLimitInput.value) || 1000
 
     // Validate page limit
     if (pageLimit < 1 || pageLimit > 1000) {
@@ -700,8 +731,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     isScraping = true
-    scrapeButton.disabled = true
-    refreshButton.disabled = true
+    showLoadingOverlay()
     refreshButton.textContent = "Refreshing..."
     progressContainer.classList.remove("hidden")
     statusDiv.classList.add("hidden")
@@ -728,6 +758,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function updateProgress(progress, message) {
     progressBar.style.width = `${progress}%`
     progressText.textContent = message
+    loadingProgress.textContent = message
   }
 
   function scrapingComplete(data) {
@@ -765,7 +796,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function resetScraping() {
     isScraping = false
-    scrapeButton.disabled = false
+    hideLoadingOverlay()
     scrapeButton.textContent = "Start Scraping Tips"
     refreshButton.textContent = "Refresh Data"
     progressContainer.classList.add("hidden")
@@ -785,6 +816,7 @@ document.addEventListener("DOMContentLoaded", function () {
     statusDiv.className = "status error"
     statusDiv.textContent = message
     statusDiv.classList.remove("hidden")
+    hideLoadingOverlay()
     resetScraping()
   }
 
