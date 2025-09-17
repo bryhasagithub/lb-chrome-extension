@@ -40,7 +40,7 @@
       if (buyButton) {
         console.log("✅ Clicking Buy button")
         buyButton.click()
-        await sleep(500) // Wait longer for modal to open
+        await sleep(200) // Reduced wait time for modal to open
         console.log("⏳ Waited 0.5 seconds after Buy click")
 
         // Check what's available in the modal
@@ -185,12 +185,12 @@
       if (tipsTab) {
         console.log("✅ Clicking Tips tab")
         tipsTab.click()
-        await sleep(1000) // Wait longer for content to load
+        await sleep(300) // Reduced wait time for content to load
         console.log("⏳ Waited 1 seconds after Tips click")
 
         // Wait for Tips content to load and look for Tips-specific elements
         console.log("🔍 Waiting for Tips content to load...")
-        await sleep(1000)
+        await sleep(400)
 
         // Look for Tips-specific content to confirm we're on the right tab
         const tipsContent =
@@ -222,8 +222,8 @@
       if (tipsTransactionsLink) {
         console.log("✅ Clicking Tips Transactions link")
         tipsTransactionsLink.click()
-        await sleep(1000)
-        console.log("⏳ Waited 1 seconds after Tips Transactions click")
+        await sleep(300)
+        console.log("⏳ Waited 0.3 seconds after Tips Transactions click")
         console.log("📍 Final URL:", window.location.href)
       } else {
         console.log("❌ Tips Transactions link not found")
@@ -254,8 +254,8 @@
         if (foundTransactionLink) {
           console.log("✅ Clicking fallback Transactions link")
           foundTransactionLink.click()
-          await sleep(2000)
-          console.log("⏳ Waited 2 seconds after fallback click")
+          await sleep(500)
+          console.log("⏳ Waited 0.5 seconds after fallback click")
           console.log("📍 Final URL:", window.location.href)
         } else {
           console.log("❌ No suitable Transactions link found")
@@ -283,9 +283,15 @@
     console.log("Current URL:", window.location.href)
 
     // Look for transaction table rows - target the specific Element UI structure
-    const tableRows = document.querySelectorAll(
-      "table.el-table__body tbody tr.el-table__row, table tbody tr.el-table__row"
+    // Use more specific selectors for better performance
+    let tableRows = document.querySelectorAll(
+      "table.el-table__body tbody tr.el-table__row"
     )
+
+    // Fallback to broader selector if specific one doesn't work
+    if (tableRows.length === 0) {
+      tableRows = document.querySelectorAll("table tbody tr.el-table__row")
+    }
 
     console.log(`📊 Found ${tableRows.length} table rows`)
 
@@ -296,113 +302,104 @@
       console.log(`Table ${index}:`, table.outerHTML.substring(0, 200) + "...")
     })
 
-    tableRows.forEach((row, index) => {
+    // Process rows more efficiently
+    for (let index = 0; index < tableRows.length; index++) {
+      const row = tableRows[index]
       const cells = row.querySelectorAll("td.el-table__cell")
-      console.log(`Row ${index}: ${cells.length} cells`)
 
-      if (cells.length >= 4) {
-        // Use the specific column classes from the HTML structure
-        const fromCell = row.querySelector("td.el-table_2_column_6 .cell")
-        const toCell = row.querySelector("td.el-table_2_column_7 .cell")
-        const amountCell = row.querySelector("td.el-table_2_column_8 .cell")
-        const dateCell = row.querySelector("td.el-table_2_column_9 .cell")
-
-        const from = fromCell?.textContent?.trim()
-        const to = toCell?.textContent?.trim()
-        const amountText = amountCell?.textContent?.trim()
-        const dateText = dateCell?.textContent?.trim()
-
-        console.log(`Row ${index} data:`, { from, to, amountText, dateText })
-
-        // Skip header row
-        if (from === "From" || to === "To" || amountText === "Amount") {
-          console.log(`Skipping header row ${index}`)
-          return
-        }
-
-        // Extract amount and currency - look for amount_text span specifically
-        let amount = null
-        let currency = "SC" // Default currency
-
-        // First try to find amount_text span in this row
-        const amountSpan = row.querySelector(".amount_text")
-        if (amountSpan) {
-          const amountValue = amountSpan.textContent.trim()
-          console.log(`Found amount_text span: "${amountValue}"`)
-
-          // Check for currency icon
-          const currencyImg = row.querySelector(".amount_img")
-          if (currencyImg) {
-            const imgSrc = currencyImg.src
-            if (imgSrc.includes("usd.png")) {
-              currency = "SC" // USD image = SC (Sweepstakes Cash)
-            } else if (imgSrc.includes("gold.png")) {
-              currency = "GC" // Gold image = GC (Gold Coins)
-            }
-          }
-
-          // Parse the amount
-          const amountMatch = amountValue.match(/([\d,]+\.?\d*)/)
-          if (amountMatch) {
-            amount = parseFloat(amountMatch[1].replace(/,/g, ""))
-            console.log(`✅ Parsed amount: ${amount} ${currency}`)
-          }
-        }
-
-        // Fallback to original method if amount_text not found
-        if (amount === null) {
-          const amountMatch = amountText?.match(
-            /([\d,]+\.?\d*)\s*(Gold Coin|G|SC|\$|USD)/i
-          )
-          if (amountMatch) {
-            amount = parseFloat(amountMatch[1].replace(/,/g, ""))
-            currency = amountMatch[2].toUpperCase()
-            console.log(`✅ Fallback amount parsing: ${amount} ${currency}`)
-          }
-        }
-
-        if (amount !== null) {
-          // Only collect SC transactions, skip GC transactions
-          if (currency === "GC") {
-            console.log(`⏭️ Skipping GC transaction: ${amount} ${currency}`)
-            return
-          }
-
-          if (currency !== "SC") {
-            console.log(`⏭️ Skipping non-SC transaction: ${amount} ${currency}`)
-            return
-          }
-
-          // Parse date
-          let timestamp = Date.now()
-          if (dateText) {
-            const dateMatch = dateText.match(
-              /(\d{4}\/\d{2}\/\d{2})\s+(\d{2}:\d{2}\s+[AP]M)/
-            )
-            if (dateMatch) {
-              const dateStr = `${dateMatch[1]} ${dateMatch[2]}`
-              timestamp = new Date(dateStr).getTime()
-            }
-          }
-
-          const transaction = {
-            from: from || "Unknown",
-            to: to || "Unknown",
-            amount: amount,
-            currency: currency,
-            timestamp: timestamp,
-            date: dateText || new Date(timestamp).toLocaleString(),
-          }
-
-          console.log(`💾 Adding SC transaction:`, transaction)
-          transactions.push(transaction)
-        } else {
-          console.log(`❌ No amount found for row ${index}:`, amountText)
-        }
-      } else {
-        console.log(`⚠️ Row ${index} has only ${cells.length} cells, skipping`)
+      // Skip if not enough cells
+      if (cells.length < 4) {
+        continue
       }
-    })
+
+      // Use the specific column classes from the HTML structure
+      const fromCell = row.querySelector("td.el-table_2_column_6 .cell")
+      const toCell = row.querySelector("td.el-table_2_column_7 .cell")
+      const amountCell = row.querySelector("td.el-table_2_column_8 .cell")
+      const dateCell = row.querySelector("td.el-table_2_column_9 .cell")
+
+      const from = fromCell?.textContent?.trim()
+      const to = toCell?.textContent?.trim()
+      const amountText = amountCell?.textContent?.trim()
+      const dateText = dateCell?.textContent?.trim()
+
+      // Skip header row
+      if (from === "From" || to === "To" || amountText === "Amount") {
+        continue
+      }
+
+      // Extract amount and currency - look for amount_text span specifically
+      let amount = null
+      let currency = "SC" // Default currency
+
+      // First try to find amount_text span in this row
+      const amountSpan = row.querySelector(".amount_text")
+      if (amountSpan) {
+        const amountValue = amountSpan.textContent.trim()
+
+        // Check for currency icon
+        const currencyImg = row.querySelector(".amount_img")
+        if (currencyImg) {
+          const imgSrc = currencyImg.src
+          if (imgSrc.includes("usd.png")) {
+            currency = "SC" // USD image = SC (Sweepstakes Cash)
+          } else if (imgSrc.includes("gold.png")) {
+            currency = "GC" // Gold image = GC (Gold Coins)
+          }
+        }
+
+        // Parse the amount
+        const amountMatch = amountValue.match(/([\d,]+\.?\d*)/)
+        if (amountMatch) {
+          amount = parseFloat(amountMatch[1].replace(/,/g, ""))
+        }
+      }
+
+      // Fallback to original method if amount_text not found
+      if (amount === null) {
+        const amountMatch = amountText?.match(
+          /([\d,]+\.?\d*)\s*(Gold Coin|G|SC|\$|USD)/i
+        )
+        if (amountMatch) {
+          amount = parseFloat(amountMatch[1].replace(/,/g, ""))
+          currency = amountMatch[2].toUpperCase()
+        }
+      }
+
+      if (amount !== null) {
+        // Only collect SC transactions, skip GC transactions
+        if (currency === "GC") {
+          continue
+        }
+
+        if (currency !== "SC") {
+          continue
+        }
+
+        // Parse date
+        let timestamp = Date.now()
+        if (dateText) {
+          const dateMatch = dateText.match(
+            /(\d{4}\/\d{2}\/\d{2})\s+(\d{2}:\d{2}\s+[AP]M)/
+          )
+          if (dateMatch) {
+            const dateStr = `${dateMatch[1]} ${dateMatch[2]}`
+            timestamp = new Date(dateStr).getTime()
+          }
+        }
+
+        const transaction = {
+          from: from || "Unknown",
+          to: to || "Unknown",
+          amount: amount,
+          currency: currency,
+          timestamp: timestamp,
+          date: dateText || new Date(timestamp).toLocaleString(),
+        }
+
+        transactions.push(transaction)
+      }
+    }
 
     console.log(
       `🎯 Total transactions found on this page: ${transactions.length}`
@@ -540,8 +537,8 @@
     if (nextButton && !nextButton.disabled) {
       console.log("✅ Clicking next page button")
       nextButton.click()
-      await sleep(1000)
-      console.log("⏳ Waited 1 seconds after next page click")
+      await sleep(500)
+      console.log("⏳ Waited 0.5 seconds after next page click")
       return true
     }
 
@@ -803,11 +800,14 @@
           )
         }
 
-        chrome.runtime.sendMessage({
-          type: "SCRAPING_PROGRESS",
-          progress: 10 + (currentPage * 80) / 10, // Estimate progress
-          message: `Scraping page ${currentPage}...`,
-        })
+        // Only send progress updates every few pages to avoid slowing down scraping
+        if (currentPage % 3 === 0 || currentPage === 1) {
+          chrome.runtime.sendMessage({
+            type: "SCRAPING_PROGRESS",
+            progress: 10 + (currentPage * 80) / 10, // Estimate progress
+            message: `Scraping page ${currentPage}...`,
+          })
+        }
 
         if (!hasNextPage() || currentPage >= maxPages) {
           // Use the page limit from popup
@@ -820,7 +820,7 @@
         }
 
         currentPage++
-        await sleep(1000) // Wait between pages
+        await sleep(300) // Reduced wait between pages
       }
 
       // Calculate user balances

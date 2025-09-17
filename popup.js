@@ -38,9 +38,38 @@ document.addEventListener("DOMContentLoaded", function () {
   const usersCountEl = document.getElementById("usersCount")
   const tipsOwedEl = document.getElementById("tipsOwed")
 
+  // Loading overlay elements
+  const loadingOverlay = document.getElementById("loadingOverlay")
+  const loadingProgress = document.getElementById("loadingProgress")
+
+  // Import elements
+  const csvFileInput = document.getElementById("csvFile")
+  const importCSVButton = document.getElementById("importCSV")
+
   let isScraping = false
   let currentSort = { column: "delta", direction: "desc" } // Default sort by delta descending
   let currentSearchTerm = "" // Track current search term
+
+  // Loading overlay functions
+  function showLoadingOverlay() {
+    loadingOverlay.classList.remove("hidden")
+    // Disable all interactive elements
+    document
+      .querySelectorAll("button, input, select, textarea")
+      .forEach((el) => {
+        el.disabled = true
+      })
+  }
+
+  function hideLoadingOverlay() {
+    loadingOverlay.classList.add("hidden")
+    // Re-enable all interactive elements
+    document
+      .querySelectorAll("button, input, select, textarea")
+      .forEach((el) => {
+        el.disabled = false
+      })
+  }
 
   // Helper function to get excluded users list
   function getExcludedUsers() {
@@ -118,6 +147,10 @@ document.addEventListener("DOMContentLoaded", function () {
   // Search event listeners
   userSearchInput.addEventListener("input", handleUserSearch)
   clearSearchButton.addEventListener("click", clearUserSearch)
+
+  // Import event listeners
+  csvFileInput.addEventListener("change", handleFileSelect)
+  importCSVButton.addEventListener("click", importCSVData)
 
   // Close modal when clicking outside of it
   transactionModal.addEventListener("click", (e) => {
@@ -269,6 +302,20 @@ document.addEventListener("DOMContentLoaded", function () {
         const userBalances = result.userBalances || {}
         const lastUpdated = result.lastUpdated
 
+        // Debug: Check first few transactions
+        if (transactions.length > 0) {
+          console.log(
+            "Loaded transactions sample:",
+            transactions.slice(0, 3).map((tx) => ({
+              from: tx.from,
+              to: tx.to,
+              timestamp: tx.timestamp,
+              date: tx.date,
+              parsedDate: new Date(tx.timestamp).toLocaleString(),
+            }))
+          )
+        }
+
         updateStats(transactions, userBalances, lastUpdated)
         updateUserList(transactions, userBalances)
 
@@ -276,8 +323,14 @@ document.addEventListener("DOMContentLoaded", function () {
         refreshButton.disabled = transactions.length === 0
         if (transactions.length === 0) {
           refreshButton.classList.add("refresh-disabled")
+          // When no data, make "Start Scraping Tips" primary
+          scrapeButton.className = "button"
+          refreshButton.className = "button secondary-button"
         } else {
           refreshButton.classList.remove("refresh-disabled")
+          // When data exists, make "Refresh Data" primary
+          refreshButton.className = "button"
+          scrapeButton.className = "button secondary-button"
         }
       }
     )
@@ -647,7 +700,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (isScraping) return
 
     // Get page limit from input
-    const pageLimit = parseInt(pageLimitInput.value) || 20
+    const pageLimit = parseInt(pageLimitInput.value) || 1000
 
     // Validate page limit
     if (pageLimit < 1 || pageLimit > 1000) {
@@ -655,29 +708,35 @@ document.addEventListener("DOMContentLoaded", function () {
       return
     }
 
-    isScraping = true
-    scrapeButton.disabled = true
-    refreshButton.disabled = true
-    scrapeButton.textContent = "Scraping..."
-    progressContainer.classList.remove("hidden")
-    statusDiv.classList.add("hidden")
+    // Check if there's existing data to determine if we should do incremental scraping
+    chrome.storage.local.get(["tipTransactions"], (result) => {
+      const hasExistingData =
+        result.tipTransactions && result.tipTransactions.length > 0
+      const incremental = hasExistingData
 
-    // Send message to content script to start scraping with page limit
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      chrome.tabs.sendMessage(
-        tabs[0].id,
-        {
-          type: "START_SCRAPING",
-          pageLimit: pageLimit,
-          incremental: false,
-        },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            showError("Please navigate to luckybird.io first")
-            resetScraping()
+      isScraping = true
+      showLoadingOverlay()
+      scrapeButton.textContent = incremental ? "Refreshing..." : "Scraping..."
+      progressContainer.classList.remove("hidden")
+      statusDiv.classList.add("hidden")
+
+      // Send message to content script to start scraping with page limit
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        chrome.tabs.sendMessage(
+          tabs[0].id,
+          {
+            type: "START_SCRAPING",
+            pageLimit: pageLimit,
+            incremental: incremental,
+          },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              showError("Please navigate to luckybird.io first")
+              resetScraping()
+            }
           }
-        }
-      )
+        )
+      })
     })
   }
 
@@ -685,7 +744,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (isScraping) return
 
     // Get page limit from input
-    const pageLimit = parseInt(pageLimitInput.value) || 20
+    const pageLimit = parseInt(pageLimitInput.value) || 1000
 
     // Validate page limit
     if (pageLimit < 1 || pageLimit > 1000) {
@@ -694,8 +753,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     isScraping = true
-    scrapeButton.disabled = true
-    refreshButton.disabled = true
+    showLoadingOverlay()
     refreshButton.textContent = "Refreshing..."
     progressContainer.classList.remove("hidden")
     statusDiv.classList.add("hidden")
@@ -722,6 +780,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function updateProgress(progress, message) {
     progressBar.style.width = `${progress}%`
     progressText.textContent = message
+    loadingProgress.textContent = message
   }
 
   function scrapingComplete(data) {
@@ -759,9 +818,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function resetScraping() {
     isScraping = false
-    scrapeButton.disabled = false
+    hideLoadingOverlay()
     scrapeButton.textContent = "Start Scraping Tips"
-    refreshButton.textContent = "🔄 Refresh Data"
+    refreshButton.textContent = "Refresh Data"
     progressContainer.classList.add("hidden")
 
     // Refresh button state will be updated by loadData()
@@ -779,6 +838,7 @@ document.addEventListener("DOMContentLoaded", function () {
     statusDiv.className = "status error"
     statusDiv.textContent = message
     statusDiv.classList.remove("hidden")
+    hideLoadingOverlay()
     resetScraping()
   }
 
@@ -1114,5 +1174,247 @@ document.addEventListener("DOMContentLoaded", function () {
     } else {
       searchResultsInfo.classList.add("hidden")
     }
+  }
+
+  // CSV Import Functions
+  function handleFileSelect(event) {
+    const file = event.target.files[0]
+    if (file && file.type === "text/csv") {
+      importCSVButton.disabled = false
+      importCSVButton.textContent = `Import ${file.name}`
+    } else {
+      importCSVButton.disabled = true
+      importCSVButton.textContent = "Import CSV Data"
+      if (file) {
+        showError("Please select a valid CSV file")
+      }
+    }
+  }
+
+  function importCSVData() {
+    const file = csvFileInput.files[0]
+    if (!file) {
+      showError("Please select a CSV file first")
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = function (e) {
+      try {
+        const csvText = e.target.result
+        const transactions = parseCSV(csvText)
+
+        if (transactions.length === 0) {
+          showError("No valid transactions found in CSV file")
+          return
+        }
+
+        // Debug: Log parsed transactions
+        console.log(
+          "Parsed transactions sample:",
+          transactions.slice(0, 3).map((tx) => ({
+            from: tx.from,
+            to: tx.to,
+            timestamp: tx.timestamp,
+            date: tx.date,
+            parsedDate: new Date(tx.timestamp).toLocaleString(),
+          }))
+        )
+
+        // Merge with existing data
+        chrome.storage.local.get(["tipTransactions"], (result) => {
+          const existingTransactions = result.tipTransactions || []
+          const mergedTransactions = mergeTransactions(
+            existingTransactions,
+            transactions
+          )
+
+          // Calculate user balances
+          const userBalances = calculateUserBalances(mergedTransactions)
+
+          // Store merged data
+          chrome.storage.local.set(
+            {
+              tipTransactions: mergedTransactions,
+              userBalances: userBalances,
+              lastUpdated: Date.now(),
+            },
+            () => {
+              showSuccess(
+                `Successfully imported ${transactions.length} transactions. Total transactions: ${mergedTransactions.length}`
+              )
+              loadData()
+
+              // Reset file input
+              csvFileInput.value = ""
+              importCSVButton.disabled = true
+              importCSVButton.textContent = "Import CSV Data"
+            }
+          )
+        })
+      } catch (error) {
+        console.error("CSV parsing error:", error)
+        showError("Error parsing CSV file. Please check the format.")
+      }
+    }
+
+    reader.readAsText(file)
+  }
+
+  function parseCSV(csvText) {
+    const lines = csvText.split("\n").filter((line) => line.trim())
+    const transactions = []
+
+    // Skip header row
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim()
+      if (!line) continue
+
+      // Parse CSV line (handle commas within quoted fields)
+      const fields = parseCSVLine(line)
+
+      if (fields.length >= 7) {
+        const [type, from, to, amount, currency, date, timestamp] = fields
+
+        // Only process tip transactions
+        if (type.toLowerCase().includes("tip")) {
+          // Parse timestamp properly
+          let parsedTimestamp
+          if (timestamp && timestamp.trim()) {
+            parsedTimestamp = parseInt(timestamp.trim())
+            // Validate timestamp (should be a reasonable Unix timestamp)
+            if (isNaN(parsedTimestamp) || parsedTimestamp < 1000000000000) {
+              // If timestamp is invalid, try parsing the date string
+              parsedTimestamp = new Date(date.trim()).getTime()
+            }
+          } else {
+            // Try to parse the date string if no timestamp
+            parsedTimestamp = new Date(date.trim()).getTime()
+          }
+
+          // Ensure we have a valid timestamp
+          if (isNaN(parsedTimestamp) || parsedTimestamp === 0) {
+            console.warn("Invalid timestamp for transaction:", {
+              from,
+              to,
+              amount,
+              date,
+              timestamp,
+            })
+            // Skip this transaction if we can't parse the date
+            return
+          }
+
+          const transaction = {
+            from: from.trim(),
+            to: to.trim(),
+            amount: parseFloat(amount.replace(/[,$]/g, "")),
+            currency: currency.trim() || "SC",
+            timestamp: parsedTimestamp,
+            date: date.trim(),
+          }
+
+          // Validate transaction
+          if (
+            transaction.from &&
+            transaction.to &&
+            !isNaN(transaction.amount) &&
+            transaction.amount > 0
+          ) {
+            transactions.push(transaction)
+          }
+        }
+      }
+    }
+
+    return transactions
+  }
+
+  function parseCSVLine(line) {
+    // Use a more robust CSV parsing approach
+    // Handle the specific format: Transaction Type,From,To,Amount,Currency,Date,Timestamp
+    // Where Date might be "9/14/2025, 5:25:00 PM"
+
+    const fields = []
+    let current = ""
+    let inQuotes = false
+    let fieldCount = 0
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i]
+
+      if (char === '"') {
+        inQuotes = !inQuotes
+      } else if (char === "," && !inQuotes) {
+        fields.push(current.trim())
+        current = ""
+        fieldCount++
+
+        // If we're at field 5 (Date field) and the next part looks like time,
+        // we need to handle the comma in the date specially
+        if (fieldCount === 5) {
+          // Look ahead to see if the next part is time
+          let j = i + 1
+          let nextPart = ""
+          while (j < line.length && line[j] !== ",") {
+            nextPart += line[j]
+            j++
+          }
+
+          // If next part looks like time (contains : and PM/AM), merge it with date
+          if (nextPart.trim().match(/\d+:\d+:\d+\s+(AM|PM)/i)) {
+            current = fields[fields.length - 1] + ", " + nextPart.trim()
+            fields[fields.length - 1] = current
+            current = ""
+            i = j - 1 // Skip the processed part
+            continue
+          }
+        }
+      } else {
+        current += char
+      }
+    }
+
+    fields.push(current.trim())
+    return fields
+  }
+
+  function mergeTransactions(existing, newTransactions) {
+    // Create a set of existing transaction IDs for quick lookup
+    const existingIds = new Set(
+      existing.map((tx) => `${tx.from}-${tx.to}-${tx.amount}-${tx.timestamp}`)
+    )
+
+    // Filter out duplicates from new transactions
+    const uniqueNewTransactions = newTransactions.filter((tx) => {
+      const id = `${tx.from}-${tx.to}-${tx.amount}-${tx.timestamp}`
+      return !existingIds.has(id)
+    })
+
+    // Combine existing and new unique transactions
+    const merged = [...existing, ...uniqueNewTransactions]
+
+    // Sort by timestamp (newest first)
+    return merged.sort((a, b) => b.timestamp - a.timestamp)
+  }
+
+  function calculateUserBalances(transactions) {
+    const balances = {}
+
+    transactions.forEach((tx) => {
+      if (!balances[tx.from]) balances[tx.from] = 0
+      if (!balances[tx.to]) balances[tx.to] = 0
+
+      // Convert to USD for consistent calculation
+      let amountUSD = tx.amount
+      if (tx.currency === "G" || tx.currency === "GOLD COIN") {
+        amountUSD = tx.amount * 0.0001
+      }
+
+      balances[tx.from] -= amountUSD // Person who sent loses money
+      balances[tx.to] += amountUSD // Person who received gains money
+    })
+
+    return balances
   }
 })
