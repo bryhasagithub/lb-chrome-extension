@@ -722,6 +722,17 @@ document.addEventListener("DOMContentLoaded", function () {
 
       // Send message to content script to start scraping with page limit
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const currentUrl = tabs[0].url
+
+        // Check if we're on luckybird.io
+        if (!currentUrl.includes("luckybird.io")) {
+          showError(
+            "Please navigate to luckybird.io first to scrape data from the website"
+          )
+          resetScraping()
+          return
+        }
+
         chrome.tabs.sendMessage(
           tabs[0].id,
           {
@@ -760,6 +771,17 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Send message to content script to start incremental scraping
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const currentUrl = tabs[0].url
+
+      // Check if we're on luckybird.io
+      if (!currentUrl.includes("luckybird.io")) {
+        showError(
+          "Please navigate to luckybird.io first to refresh data from the website"
+        )
+        resetScraping()
+        return
+      }
+
       chrome.tabs.sendMessage(
         tabs[0].id,
         {
