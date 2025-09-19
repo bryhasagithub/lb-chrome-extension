@@ -901,5 +901,384 @@
     }
   })
 
+  // Game hotkey functionality
+  function initializeGameHotkeys() {
+    console.log("🎮 Initializing game hotkeys for LuckyBird.io")
+
+    // Find the game canvas
+    const gameCanvas = document.querySelector("#gameCanvas.gameCanvas")
+    if (!gameCanvas) {
+      console.log("❌ Game canvas not found")
+      return false
+    }
+
+    console.log("✅ Game canvas found, setting up hotkeys")
+
+    // Add keyboard event listener to the document
+    document.addEventListener("keydown", handleGameHotkeys)
+
+    // Add visual feedback for hotkeys
+    addHotkeyVisualFeedback()
+
+    return true
+  }
+
+  function handleGameHotkeys(event) {
+    // Only handle hotkeys when the game canvas is visible and focused
+    const gameCanvas = document.querySelector("#gameCanvas.gameCanvas")
+    if (!gameCanvas || gameCanvas.offsetParent === null) {
+      return
+    }
+
+    // Prevent default behavior for our hotkeys
+    if (event.key === "1" || event.key === "2") {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    switch (event.key) {
+      case "1":
+        console.log("🎯 Hotkey 1 pressed - Left cell")
+        selectLeftCell()
+        break
+      case "2":
+        console.log("🎯 Hotkey 2 pressed - Right cell")
+        selectRightCell()
+        break
+      case " ":
+        // Spacebar for play button
+        console.log("🎯 Spacebar pressed - Play button")
+        clickPlayButton()
+        break
+      case "Enter":
+        // Enter for play button
+        console.log("🎯 Enter pressed - Play button")
+        clickPlayButton()
+        break
+    }
+  }
+
+  function selectLeftCell() {
+    // Look for the leftmost selectable cell in the game
+    // This might be a mushroom, coin, or other game element
+    const leftCell = findLeftmostGameCell()
+    if (leftCell) {
+      console.log("✅ Clicking left cell")
+      simulateClick(leftCell)
+      showHotkeyFeedback("Left Cell Selected")
+    } else {
+      console.log("❌ Left cell not found")
+      showHotkeyFeedback("Left Cell Not Found")
+    }
+  }
+
+  function selectRightCell() {
+    // Look for the rightmost selectable cell in the game
+    const rightCell = findRightmostGameCell()
+    if (rightCell) {
+      console.log("✅ Clicking right cell")
+      simulateClick(rightCell)
+      showHotkeyFeedback("Right Cell Selected")
+    } else {
+      console.log("❌ Right cell not found")
+      showHotkeyFeedback("Right Cell Not Found")
+    }
+  }
+
+  function clickPlayButton() {
+    // Look for the play button
+    const playButton = findPlayButton()
+    if (playButton) {
+      console.log("✅ Clicking play button")
+      simulateClick(playButton)
+      showHotkeyFeedback("Play Button Clicked")
+    } else {
+      console.log("❌ Play button not found")
+      showHotkeyFeedback("Play Button Not Found")
+    }
+  }
+
+  function findLeftmostGameCell() {
+    // Look for game cells - these might be mushrooms, coins, or other interactive elements
+    const gameCanvas = document.querySelector("#gameCanvas.gameCanvas")
+    if (!gameCanvas) return null
+
+    // Try multiple approaches to find game cells
+
+    // Approach 1: Look for elements with specific game-related classes or attributes
+    const gameSelectors = [
+      '[class*="mushroom"]',
+      '[class*="coin"]',
+      '[class*="cell"]',
+      '[class*="tile"]',
+      '[class*="block"]',
+      '[class*="item"]',
+      "[data-cell]",
+      "[data-tile]",
+      "[data-item]",
+    ]
+
+    let gameElements = []
+    for (const selector of gameSelectors) {
+      const elements = document.querySelectorAll(selector)
+      gameElements.push(...Array.from(elements))
+    }
+
+    // Approach 2: Look for clickable elements within the game canvas area
+    const clickableElements = document.querySelectorAll(
+      '[onclick], [role="button"], .clickable, .selectable, button, div[tabindex]'
+    )
+
+    const canvasRect = gameCanvas.getBoundingClientRect()
+    const elementsInCanvas = Array.from(clickableElements).filter((el) => {
+      const rect = el.getBoundingClientRect()
+      return (
+        rect.left >= canvasRect.left - 100 &&
+        rect.right <= canvasRect.right + 100 &&
+        rect.top >= canvasRect.top - 100 &&
+        rect.bottom <= canvasRect.bottom + 100
+      )
+    })
+
+    gameElements.push(...elementsInCanvas)
+
+    // Approach 3: Look for elements with game-related text content
+    const allElements = document.querySelectorAll("div, span, button, img")
+    const textGameElements = Array.from(allElements).filter((el) => {
+      const text = el.textContent.toLowerCase()
+      const className = el.className.toLowerCase()
+      return (
+        (text.includes("mushroom") ||
+          text.includes("coin") ||
+          text.includes("cell") ||
+          text.includes("tile") ||
+          className.includes("game") ||
+          className.includes("cell") ||
+          className.includes("tile")) &&
+        el.offsetParent !== null
+      ) // Element is visible
+    })
+
+    gameElements.push(...textGameElements)
+
+    // Remove duplicates and filter by position
+    const uniqueElements = [...new Set(gameElements)]
+    const validElements = uniqueElements.filter((el) => {
+      const rect = el.getBoundingClientRect()
+      return (
+        rect.width > 0 &&
+        rect.height > 0 && // Element has size
+        rect.left >= canvasRect.left - 200 &&
+        rect.right <= canvasRect.right + 200 &&
+        rect.top >= canvasRect.top - 200 &&
+        rect.bottom <= canvasRect.bottom + 200
+      )
+    })
+
+    if (validElements.length === 0) {
+      console.log("❌ No game cells found")
+      return null
+    }
+
+    // Return the leftmost element
+    const leftmost = validElements.sort(
+      (a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left
+    )[0]
+    console.log(
+      "✅ Found leftmost game cell:",
+      leftmost.className,
+      leftmost.textContent
+    )
+    return leftmost
+  }
+
+  function findRightmostGameCell() {
+    // Similar to findLeftmostGameCell but return the rightmost
+    const gameCanvas = document.querySelector("#gameCanvas.gameCanvas")
+    if (!gameCanvas) return null
+
+    // Use the same logic as findLeftmostGameCell but return rightmost
+    const gameSelectors = [
+      '[class*="mushroom"]',
+      '[class*="coin"]',
+      '[class*="cell"]',
+      '[class*="tile"]',
+      '[class*="block"]',
+      '[class*="item"]',
+      "[data-cell]",
+      "[data-tile]",
+      "[data-item]",
+    ]
+
+    let gameElements = []
+    for (const selector of gameSelectors) {
+      const elements = document.querySelectorAll(selector)
+      gameElements.push(...Array.from(elements))
+    }
+
+    const clickableElements = document.querySelectorAll(
+      '[onclick], [role="button"], .clickable, .selectable, button, div[tabindex]'
+    )
+
+    const canvasRect = gameCanvas.getBoundingClientRect()
+    const elementsInCanvas = Array.from(clickableElements).filter((el) => {
+      const rect = el.getBoundingClientRect()
+      return (
+        rect.left >= canvasRect.left - 100 &&
+        rect.right <= canvasRect.right + 100 &&
+        rect.top >= canvasRect.top - 100 &&
+        rect.bottom <= canvasRect.bottom + 100
+      )
+    })
+
+    gameElements.push(...elementsInCanvas)
+
+    const allElements = document.querySelectorAll("div, span, button, img")
+    const textGameElements = Array.from(allElements).filter((el) => {
+      const text = el.textContent.toLowerCase()
+      const className = el.className.toLowerCase()
+      return (
+        (text.includes("mushroom") ||
+          text.includes("coin") ||
+          text.includes("cell") ||
+          text.includes("tile") ||
+          className.includes("game") ||
+          className.includes("cell") ||
+          className.includes("tile")) &&
+        el.offsetParent !== null
+      )
+    })
+
+    gameElements.push(...textGameElements)
+
+    const uniqueElements = [...new Set(gameElements)]
+    const validElements = uniqueElements.filter((el) => {
+      const rect = el.getBoundingClientRect()
+      return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        rect.left >= canvasRect.left - 200 &&
+        rect.right <= canvasRect.right + 200 &&
+        rect.top >= canvasRect.top - 200 &&
+        rect.bottom <= canvasRect.bottom + 200
+      )
+    })
+
+    if (validElements.length === 0) {
+      console.log("❌ No game cells found")
+      return null
+    }
+
+    // Return the rightmost element
+    const rightmost = validElements.sort(
+      (a, b) =>
+        b.getBoundingClientRect().right - a.getBoundingClientRect().right
+    )[0]
+    console.log(
+      "✅ Found rightmost game cell:",
+      rightmost.className,
+      rightmost.textContent
+    )
+    return rightmost
+  }
+
+  function findPlayButton() {
+    // Look for the play button
+    const playButton =
+      document.querySelector('button:contains("Play")') ||
+      document.querySelector('[class*="play"]') ||
+      document.querySelector('button[class*="primary"]') ||
+      findElementByText("button", "Play") ||
+      findElementByText("div", "Play") ||
+      findElementByText("span", "Play")
+
+    return playButton
+  }
+
+  function simulateClick(element) {
+    if (!element) return
+
+    // Create and dispatch a click event
+    const clickEvent = new MouseEvent("click", {
+      view: window,
+      bubbles: true,
+      cancelable: true,
+      clientX:
+        element.getBoundingClientRect().left +
+        element.getBoundingClientRect().width / 2,
+      clientY:
+        element.getBoundingClientRect().top +
+        element.getBoundingClientRect().height / 2,
+    })
+
+    element.dispatchEvent(clickEvent)
+
+    // Also try direct click if the event doesn't work
+    if (typeof element.click === "function") {
+      element.click()
+    }
+  }
+
+  function addHotkeyVisualFeedback() {
+    // Create a visual indicator for hotkeys
+    const feedbackDiv = document.createElement("div")
+    feedbackDiv.id = "hotkey-feedback"
+    feedbackDiv.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 10px 15px;
+      border-radius: 5px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      z-index: 10000;
+      display: none;
+      pointer-events: none;
+    `
+    document.body.appendChild(feedbackDiv)
+  }
+
+  function showHotkeyFeedback(message) {
+    const feedbackDiv = document.getElementById("hotkey-feedback")
+    if (feedbackDiv) {
+      feedbackDiv.textContent = message
+      feedbackDiv.style.display = "block"
+
+      // Hide after 2 seconds
+      setTimeout(() => {
+        feedbackDiv.style.display = "none"
+      }, 2000)
+    }
+  }
+
+  // Initialize hotkeys when the page loads
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      setTimeout(initializeGameHotkeys, 1000) // Wait a bit for the game to load
+    })
+  } else {
+    setTimeout(initializeGameHotkeys, 1000)
+  }
+
+  // Also try to initialize when the game canvas appears
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.type === "childList") {
+        const gameCanvas = document.querySelector("#gameCanvas.gameCanvas")
+        if (gameCanvas && !document.getElementById("hotkey-feedback")) {
+          console.log("🎮 Game canvas detected, initializing hotkeys")
+          initializeGameHotkeys()
+        }
+      }
+    })
+  })
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+  })
+
   console.log("Tip Tracker content script loaded for LuckyBird.io")
 })()
